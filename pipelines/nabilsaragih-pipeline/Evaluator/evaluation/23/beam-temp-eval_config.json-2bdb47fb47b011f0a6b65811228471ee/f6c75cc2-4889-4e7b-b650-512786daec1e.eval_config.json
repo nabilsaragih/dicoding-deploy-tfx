@@ -1,0 +1,60 @@
+{
+  "evalConfig": {
+    "modelSpecs": [
+      {
+        "labelKey": "status_xf",
+        "predictionKey": "predictions"
+      }
+    ],
+    "slicingSpecs": [
+      {}
+    ],
+    "metricsSpecs": [
+      {
+        "metrics": [
+          {
+            "className": "ExampleCount"
+          },
+          {
+            "className": "SparseCategoricalAccuracy"
+          },
+          {
+            "className": "Precision",
+            "config": "{\"name\": \"macro\"}"
+          },
+          {
+            "className": "Recall",
+            "config": "{\"name\": \"macro\"}"
+          },
+          {
+            "className": "AUC",
+            "config": "{\"name\": \"macro\"}"
+          },
+          {
+            "className": "FalsePositives"
+          },
+          {
+            "className": "FalseNegatives"
+          },
+          {
+            "className": "SparseCategoricalAccuracy",
+            "threshold": {
+              "valueThreshold": {
+                "lowerBound": 0.5
+              }
+            }
+          }
+        ],
+        "modelNames": [
+          ""
+        ]
+      }
+    ]
+  },
+  "version": "0.42.0",
+  "dataLocation": "<user provided PCollection>",
+  "fileFormat": "<unknown>",
+  "modelLocations": {
+    "": "pipelines\\nabilsaragih-pipeline\\Trainer\\model\\14\\Format-Serving"
+  }
+}
