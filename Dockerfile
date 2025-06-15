@@ -1,6 +1,6 @@
 FROM tensorflow/serving:latest
 
-COPY ./serving_model /models/mental-health-model
+COPY ./serving_model/mental-health-model /models/mental-health-model
 
 ENV MODEL_NAME=mental-health-model
 ENV MODEL_BASE_PATH=/models
