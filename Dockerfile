@@ -4,11 +4,8 @@ COPY ./serving_model/mental-health-model /models/mental-health-model
 
 ENV MODEL_NAME=mental-health-model
 ENV MODEL_BASE_PATH=/models
-ENV PORT=8501
+ENV PORT=8080
 
-RUN echo '#!/bin/bash \n\n\
-env \n\
-tensorflow_model_server --port=8500 --rest_api_port=${PORT} \
---model_name=${MODEL_NAME} --model_base_path=${MODEL_BASE_PATH}/${MODEL_NAME} \
-"$@"' > /usr/bin/tf_serving_entrypoint.sh \
-&& chmod +x /usr/bin/tf_serving_entrypoint.sh  
+EXPOSE 8080
+
+CMD ["bash", "-c", "tensorflow_model_server --rest_api_port=${PORT} --model_name=${MODEL_NAME} --model_base_path=${MODEL_BASE_PATH}/${MODEL_NAME}"]
