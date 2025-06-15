@@ -1,7 +1,7 @@
 FROM tensorflow/serving:latest
 
 COPY ./serving_model/mental-health-model /models/mental-health-model
-COPY ./config/prometheus.config /model_config/prometheus.config
+COPY ./monitoring/prometheus.config /model_config/prometheus.config
 
 ENV MODEL_NAME=mental-health-model
 ENV MODEL_BASE_PATH=/models
