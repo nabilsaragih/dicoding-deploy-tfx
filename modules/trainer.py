@@ -1,26 +1,41 @@
+"""Module Trainer untuk membangun dan melatih model klasifikasi teks."""
+
 import os
+import json
 import tensorflow as tf
 import tensorflow_transform as tft
 from tfx.components.trainer.fn_args_utils import FnArgs
-import json
 
-LABEL_KEY = "status" 
-FEATURE_KEY = "statement"  
+
+LABEL_KEY = "status"
+FEATURE_KEY = "statement"
 VOCAB_SIZE = 10000
 SEQUENCE_LENGTH = 100
-EMBEDDING_DIM = 64 
-NUM_EPOCHS = 15 
+EMBEDDING_DIM = 64
+NUM_EPOCHS = 15
 BATCH_SIZE = 64
-NUM_CLASSES = 7 
+NUM_CLASSES = 7
 
-def transformed_name(key):
+
+def transformed_name(key: str) -> str:
+    """Mengembalikan nama fitur yang telah ditransformasi."""
     return f"{key}_xf"
 
+
 def gzip_reader_fn(filenames):
+    """Membaca file TFRecord yang dikompres."""
     return tf.data.TFRecordDataset(filenames, compression_type="GZIP")
 
-def input_fn(file_pattern, tf_transform_output, num_epochs, batch_size=BATCH_SIZE) -> tf.data.Dataset:
+
+def input_fn(
+    file_pattern,
+    tf_transform_output,
+    num_epochs,
+    batch_size: int = BATCH_SIZE
+) -> tf.data.Dataset:
+    """Membuat dataset input dari file TFRecord."""
     transform_feature_spec = tf_transform_output.transformed_feature_spec().copy()
+
     dataset = tf.data.experimental.make_batched_features_dataset(
         file_pattern=file_pattern,
         batch_size=batch_size,
@@ -29,11 +44,12 @@ def input_fn(file_pattern, tf_transform_output, num_epochs, batch_size=BATCH_SIZ
         num_epochs=num_epochs,
         label_key=transformed_name(LABEL_KEY),
     )
-    
+
     def _convert_labels(features, labels):
         return features, tf.cast(labels, tf.int32)
-    
+
     return dataset.map(_convert_labels)
+
 
 vectorize_layer = tf.keras.layers.TextVectorization(
     standardize="lower_and_strip_punctuation",
@@ -43,14 +59,20 @@ vectorize_layer = tf.keras.layers.TextVectorization(
     output_sequence_length=SEQUENCE_LENGTH,
 )
 
+
 def model_builder(hp):
+    """Membangun arsitektur model Keras sesuai dengan hyperparameter."""
     if isinstance(hp, dict) and 'values' in hp:
         hp = hp['values']
 
-    inputs = tf.keras.Input(shape=(1,), name=transformed_name(FEATURE_KEY), dtype=tf.string)
-    reshaped_narrative = tf.reshape(inputs, [-1])
-    
-    x = vectorize_layer(reshaped_narrative)
+    inputs = tf.keras.Input(
+        shape=(1,),
+        name=transformed_name(FEATURE_KEY),
+        dtype=tf.string
+    )
+    reshaped_input = tf.reshape(inputs, [-1])
+
+    x = vectorize_layer(reshaped_input)
     x = tf.keras.layers.Embedding(VOCAB_SIZE, EMBEDDING_DIM, name="embedding")(x)
 
     if hp.get('use_lstm', False):
@@ -62,22 +84,24 @@ def model_builder(hp):
     x = tf.keras.layers.Dropout(hp.get('dropout_rate', 0.3))(x)
     x = tf.keras.layers.Dense(hp.get('unit_2', 64), activation="relu")(x)
 
-    outputs = tf.keras.layers.Dense(NUM_CLASSES, activation="softmax")(x) 
+    outputs = tf.keras.layers.Dense(NUM_CLASSES, activation="softmax")(x)
 
     model = tf.keras.Model(inputs=inputs, outputs=outputs)
-    
+
     model.compile(
-        loss="sparse_categorical_crossentropy", 
+        loss="sparse_categorical_crossentropy",
         optimizer=tf.keras.optimizers.Adam(
             learning_rate=hp.get('learning_rate', 0.001)
         ),
-        metrics=["accuracy"], 
+        metrics=["accuracy"],
     )
 
     model.summary()
     return model
 
+
 def _get_serve_tf_examples_fn(model, tf_transform_output):
+    """Menyediakan fungsi serving model untuk produksi menggunakan TF Serving."""
     model.tft_layer = tf_transform_output.transform_features_layer()
 
     @tf.function
@@ -90,7 +114,9 @@ def _get_serve_tf_examples_fn(model, tf_transform_output):
 
     return serve_tf_examples_fn
 
+
 def run_fn(fn_args: FnArgs) -> None:
+    """Fungsi utama untuk melatih dan menyimpan model klasifikasi teks."""
     log_dir = os.path.join(os.path.dirname(fn_args.serving_model_dir), "logs")
 
     callbacks = [
@@ -105,13 +131,19 @@ def run_fn(fn_args: FnArgs) -> None:
             verbose=1,
             save_best_only=True,
         ),
-        tf.keras.callbacks.ReduceLROnPlateau(monitor="val_loss", factor=0.2, patience=3, verbose=1)
+        tf.keras.callbacks.ReduceLROnPlateau(
+            monitor="val_loss", factor=0.2, patience=3, verbose=1
+        ),
     ]
 
     tf_transform_output = tft.TFTransformOutput(fn_args.transform_graph_path)
-    
-    train_set = input_fn(fn_args.train_files, tf_transform_output, NUM_EPOCHS)
-    val_set = input_fn(fn_args.eval_files, tf_transform_output, NUM_EPOCHS)
+
+    train_set = input_fn(
+        fn_args.train_files, tf_transform_output, num_epochs=NUM_EPOCHS
+    )
+    val_set = input_fn(
+        fn_args.eval_files, tf_transform_output, num_epochs=NUM_EPOCHS
+    )
 
     vectorize_layer.adapt(
         train_set.map(lambda features, label: features[transformed_name(FEATURE_KEY)])
@@ -120,7 +152,7 @@ def run_fn(fn_args: FnArgs) -> None:
     best_hyperparameters = fn_args.hyperparameters
     if isinstance(best_hyperparameters, str):
         best_hyperparameters = json.loads(best_hyperparameters)
-    
+
     default_hparams = {
         'unit_1': 128,
         'unit_2': 64,
@@ -128,20 +160,25 @@ def run_fn(fn_args: FnArgs) -> None:
         'dropout_rate': 0.3,
         'use_lstm': False
     }
+
     best_hyperparameters = {**default_hparams, **best_hyperparameters}
 
     model = model_builder(best_hyperparameters)
 
-    class_counts = tf.concat([y for x, y in train_set], axis=0)
+    class_counts = tf.concat([y for _, y in train_set], axis=0)
     class_counts = tf.math.bincount(class_counts)
-    class_weights = {i: 1.0/count for i, count in enumerate(class_counts.numpy())}
-    class_weights = {k: v/min(class_weights.values()) for k, v in class_weights.items()}
+    class_weights = {
+        i: 1.0 / count for i, count in enumerate(class_counts.numpy())
+    }
+    class_weights = {
+        k: v / min(class_weights.values()) for k, v in class_weights.items()
+    }
 
     model.fit(
         x=train_set,
         validation_data=val_set,
         callbacks=callbacks,
-        class_weight=class_weights, 
+        class_weight=class_weights,
         steps_per_epoch=fn_args.train_steps or 1000,
         validation_steps=fn_args.eval_steps or 1000,
         epochs=NUM_EPOCHS,
@@ -155,4 +192,8 @@ def run_fn(fn_args: FnArgs) -> None:
         )
     }
 
-    model.save(fn_args.serving_model_dir, save_format="tf", signatures=signatures)
+    model.save(
+        fn_args.serving_model_dir,
+        save_format="tf",
+        signatures=signatures
+    )
