@@ -15,4 +15,4 @@ CMD tensorflow_model_server \
     --rest_api_host=0.0.0.0 \
     --model_name=${MODEL_NAME} \
     --model_base_path=${MODEL_BASE_PATH}/${MODEL_NAME} \
-    --monitoring_config=${MONITORING_CONFIG}
+    --monitoring_config_file=${MONITORING_CONFIG}
